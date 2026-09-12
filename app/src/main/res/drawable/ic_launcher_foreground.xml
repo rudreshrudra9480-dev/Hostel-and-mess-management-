@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Building base -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M28,82 L80,82 L80,38 L66,24 L28,24 Z" />
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M54,24 L80,38 L80,82 L54,82 Z" />
+    <!-- Windows -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,34 h6 v6 h-6 z M44,34 h6 v6 h-6 z M34,46 h6 v6 h-6 z M44,46 h6 v6 h-6 z M34,58 h6 v6 h-6 z M44,58 h6 v6 h-6 z" />
+    <path
+        android:fillColor="#E0F2FE"
+        android:pathData="M60,46 h6 v6 h-6 z M70,46 h6 v6 h-6 z M60,58 h6 v6 h-6 z M70,58 h6 v6 h-6 z" />
+    <!-- Door -->
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M38,70 h14 v12 h-14 z" />
+    <!-- QR Accent Badge -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M58,54 h24 v24 h-24 z" />
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M62,58 h6 v6 h-6 z M72,58 h6 v6 h-6 z M62,68 h6 v6 h-6 z M72,68 h2 v2 h-2 z M76,70 h2 v2 h-2 z" />
+</vector>

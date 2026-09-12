@@ -1,0 +1,6 @@
+{
+  "name": "Hostel & Mess Tracker",
+  "description": "QR-Based Hostel Management & Mess Tracking System with bifurcated Admin and Student security portals",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
