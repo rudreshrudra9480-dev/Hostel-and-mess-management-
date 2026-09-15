@@ -93,16 +93,25 @@ fun AdminMainContainer(
                     val selected = tab == currentTab
                     val icon = when (tab) {
                         AdminTab.STUDENT_REGISTRATION -> Icons.Default.PersonAdd
-                        AdminTab.MESS_MENU -> Icons.Default.Restaurant
+                        AdminTab.WORKER_ACCESS -> Icons.Default.Badge
                         AdminTab.ROOM_MATRIX -> Icons.Default.MeetingRoom
+                        AdminTab.MESS_MENU -> Icons.Default.Restaurant
                         AdminTab.SCANNER -> Icons.Default.QrCodeScanner
                         AdminTab.COMPLAINTS -> Icons.Default.ReportProblem
+                    }
+                    val labelText = when (tab) {
+                        AdminTab.STUDENT_REGISTRATION -> "Students"
+                        AdminTab.WORKER_ACCESS -> "Workers"
+                        AdminTab.ROOM_MATRIX -> "Rooms"
+                        AdminTab.MESS_MENU -> "Menu"
+                        AdminTab.SCANNER -> "Scanner"
+                        AdminTab.COMPLAINTS -> "Grievance"
                     }
                     NavigationBarItem(
                         selected = selected,
                         onClick = { viewModel.setAdminTab(tab) },
                         icon = { Icon(icon, contentDescription = tab.title) },
-                        label = { Text(tab.title.substringBefore(" "), fontSize = 11.sp) },
+                        label = { Text(labelText, fontSize = 10.sp, maxLines = 1) },
                         modifier = Modifier.testTag("admin_tab_${tab.name.lowercase()}")
                     )
                 }
@@ -112,8 +121,9 @@ fun AdminMainContainer(
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             when (currentTab) {
                 AdminTab.STUDENT_REGISTRATION -> AdminStudentRegistrationScreen(viewModel)
-                AdminTab.MESS_MENU -> AdminMenuTimingsScreen(viewModel)
+                AdminTab.WORKER_ACCESS -> AdminWorkerAccessScreen(viewModel)
                 AdminTab.ROOM_MATRIX -> AdminRoomMatrixScreen(viewModel)
+                AdminTab.MESS_MENU -> AdminMenuTimingsScreen(viewModel)
                 AdminTab.SCANNER -> AdminScannerVerificationScreen(viewModel)
                 AdminTab.COMPLAINTS -> AdminComplaintsBillingScreen(viewModel)
             }
@@ -998,8 +1008,15 @@ fun AdminRoomMatrixScreen(viewModel: HostelViewModel) {
 
     var showAddRoomDialog by remember { mutableStateOf(false) }
     var selectedRoomForEdit by remember { mutableStateOf<Room?>(null) }
-    var selectedFilter by remember { mutableStateOf("ALL") } // ALL, AVAILABLE, FULL, MAINTENANCE
+    var selectedFilter by remember { mutableStateOf("ALL") } // ALL, REQUESTS, AVAILABLE, FULL, MAINTENANCE
     var feedbackNotification by remember { mutableStateOf<String?>(null) }
+
+    val roomRequests by viewModel.roomRequests.collectAsState()
+    val pendingRequests = roomRequests.filter { it.status == RoomRequestStatus.PENDING }
+    var selectedRequestForAction by remember { mutableStateOf<RoomRequest?>(null) }
+    var actionType by remember { mutableStateOf<String?>(null) } // "APPROVE" or "REJECT"
+    var allocateRoomInput by remember { mutableStateOf("") }
+    var actionRemarksInput by remember { mutableStateOf("") }
 
     val filteredRooms = when (selectedFilter) {
         "AVAILABLE" -> rooms.filter { it.status == RoomStatus.AVAILABLE }
@@ -1087,16 +1104,18 @@ fun AdminRoomMatrixScreen(viewModel: HostelViewModel) {
             Spacer(modifier = Modifier.height(10.dp))
 
             // Filters
-            Row(
+            LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                listOf(
-                    "ALL" to "All (${rooms.size})",
+                val filterItems = listOf(
+                    "ALL" to "All Rooms (${rooms.size})",
+                    "REQUESTS" to "Student Requests (${roomRequests.size})",
                     "AVAILABLE" to "Available (${rooms.count { it.status == RoomStatus.AVAILABLE }})",
                     "FULL" to "Full (${rooms.count { it.status == RoomStatus.FULL }})",
                     "MAINTENANCE" to "Maintenance ($maintenanceRooms)"
-                ).forEach { (key, label) ->
+                )
+                items(filterItems) { (key, label) ->
                     FilterChip(
                         selected = selectedFilter == key,
                         onClick = { selectedFilter = key },
@@ -1106,11 +1125,138 @@ fun AdminRoomMatrixScreen(viewModel: HostelViewModel) {
             }
         }
 
-        item {
-            Text("Room Allocation Breakdown (${filteredRooms.size})", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        }
+        if (selectedFilter == "REQUESTS") {
+            item {
+                Text("Student Room Allotment & Transfer Requests (${roomRequests.size})", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
 
-        items(filteredRooms) { room ->
+            if (roomRequests.isEmpty()) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(12.dp),
+                        border = CardDefaults.outlinedCardBorder(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.Default.Inbox, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(32.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("No Room Requests Found", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("When students apply for room change or allotment, they appear here for approval.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            } else {
+                items(roomRequests) { req ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        shape = RoundedCornerShape(12.dp),
+                        border = CardDefaults.outlinedCardBorder(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(req.studentName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("Roll No: ${req.studentId} • Current: ${req.currentRoom.ifBlank { "Unassigned" }}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+
+                                val (chipBg, chipText) = when (req.status) {
+                                    RoomRequestStatus.PENDING -> Color(0xFFFEF3C7) to Color(0xFFD97706)
+                                    RoomRequestStatus.APPROVED, RoomRequestStatus.ALLOCATED -> Color(0xFFD1FAE5) to Color(0xFF059669)
+                                    RoomRequestStatus.REJECTED -> Color(0xFFFEE2E2) to Color(0xFFDC2626)
+                                }
+
+                                Surface(color = chipBg, shape = RoundedCornerShape(6.dp)) {
+                                    Text(
+                                        req.status.displayName,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = chipText,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Text("Request: ${req.requestType} • ${req.preferredBlock} (${req.preferredRoomType})", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("Reason: ${req.reason}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (req.specialNotes.isNotBlank()) {
+                                        Text("Notes: ${req.specialNotes}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+
+                            if (!req.wardenRemarks.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Warden Remarks: ${req.wardenRemarks}", fontSize = 11.sp, color = Color(0xFF059669), fontWeight = FontWeight.SemiBold)
+                                if (!req.allocatedRoom.isNullOrBlank()) {
+                                    Text("Allocated Room: ${req.allocatedRoom}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669))
+                                }
+                            }
+
+                            if (req.status == RoomRequestStatus.PENDING) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            selectedRequestForAction = req
+                                            actionType = "REJECT"
+                                            actionRemarksInput = "Unable to accommodate requested room at this time."
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Text("Reject", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                                    }
+
+                                    Spacer(modifier = Modifier.width(8.dp))
+
+                                    Button(
+                                        onClick = {
+                                            selectedRequestForAction = req
+                                            actionType = "APPROVE"
+                                            allocateRoomInput = "B-201"
+                                            actionRemarksInput = "Approved and allotted as per availability."
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Approve & Allocate", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            item {
+                Text("Room Allocation Breakdown (${filteredRooms.size})", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+
+            items(filteredRooms) { room ->
             val vacantBeds = (room.capacity - room.occupiedBeds).coerceAtLeast(0)
             val residentStudents = users.filter { it.roomNumber.equals(room.roomNumber, ignoreCase = true) }
 
@@ -1228,6 +1374,78 @@ fun AdminRoomMatrixScreen(viewModel: HostelViewModel) {
                 }
             }
         }
+        }
+    }
+
+    // Student Room Request Review & Allocation Dialog
+    if (selectedRequestForAction != null) {
+        val req = selectedRequestForAction!!
+        AlertDialog(
+            onDismissRequest = { selectedRequestForAction = null },
+            title = {
+                Text(
+                    if (actionType == "APPROVE") "Approve & Allocate Room" else "Reject Room Request",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Student: ${req.studentName} (${req.studentId})", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("Request Type: ${req.requestType} • Preferred: ${req.preferredBlock} (${req.preferredRoomType})", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                    if (actionType == "APPROVE") {
+                        OutlinedTextField(
+                            value = allocateRoomInput,
+                            onValueChange = { allocateRoomInput = it },
+                            label = { Text("Assign Room Number *") },
+                            placeholder = { Text("e.g. A-204 or B-102") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = actionRemarksInput,
+                        onValueChange = { actionRemarksInput = it },
+                        label = { Text("Warden Remarks *") },
+                        placeholder = { Text("Reason or allotment details...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (actionType == "APPROVE") {
+                            viewModel.approveRoomRequest(
+                                requestId = req.id,
+                                allocatedRoomNumber = allocateRoomInput.ifBlank { "B-201" },
+                                remarks = actionRemarksInput.ifBlank { "Approved & Allotted" }
+                            )
+                            feedbackNotification = "Room ${allocateRoomInput.ifBlank { "B-201" }} successfully allotted to ${req.studentName}!"
+                        } else {
+                            viewModel.rejectRoomRequest(
+                                requestId = req.id,
+                                remarks = actionRemarksInput.ifBlank { "Rejected by Warden Office" }
+                            )
+                            feedbackNotification = "Request from ${req.studentName} has been rejected."
+                        }
+                        selectedRequestForAction = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (actionType == "APPROVE") Color(0xFF059669) else MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text(if (actionType == "APPROVE") "Confirm Allotment" else "Confirm Rejection")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedRequestForAction = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Add New Room Dialog
@@ -2176,6 +2394,1105 @@ fun AdminComplaintsBillingScreen(viewModel: HostelViewModel) {
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
                         ) {
                             Text("Approve", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// WARDEN WORKER ACCESS MANAGEMENT SCREEN
+// ==========================================
+@Composable
+fun AdminWorkerAccessScreen(viewModel: HostelViewModel) {
+    val users by viewModel.users.collectAsState()
+    val workers = users.filter { it.role == UserRole.STAFF }
+
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedDepartment by remember { mutableStateOf("All") }
+    var editingWorker by remember { mutableStateOf<User?>(null) }
+    var showAddWorkerDialog by remember { mutableStateOf(false) }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+
+    val departments = listOf("All", "Mess & Kitchen", "Maintenance & Repairs", "Sanitation & Housekeeping", "Campus Security")
+
+    val filteredWorkers = workers.filter { worker ->
+        val matchesSearch = worker.name.contains(searchQuery, ignoreCase = true) ||
+                worker.studentId.contains(searchQuery, ignoreCase = true) ||
+                worker.jobTitle.contains(searchQuery, ignoreCase = true) ||
+                worker.department.contains(searchQuery, ignoreCase = true)
+        val matchesDept = selectedDepartment == "All" || worker.department.equals(selectedDepartment, ignoreCase = true)
+        matchesSearch && matchesDept
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // Section Header & Subtitle
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF0284C7)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.ManageAccounts, contentDescription = null, tint = Color.White)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("Worker & Staff Access Control", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            Text("Warden Privilege: Configure Granular Staff Permissions", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Overview Metrics
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            color = Color(0xFF1E293B),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("${workers.size}", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = Color.White)
+                                Text("Total Staff", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                            }
+                        }
+                        Surface(
+                            color = Color(0xFF1E293B),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("${workers.count { it.isActive }}", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = Color(0xFF10B981))
+                                Text("Active", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                            }
+                        }
+                        Surface(
+                            color = Color(0xFF1E293B),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("${workers.count { it.department.contains("Mess", ignoreCase = true) }}", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = Color(0xFFF59E0B))
+                                Text("Mess Crew", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                            }
+                        }
+                        Surface(
+                            color = Color(0xFF1E293B),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("${workers.count { it.department.contains("Maint", ignoreCase = true) }}", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = Color(0xFF38BDF8))
+                                Text("Repairs", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Notification banner if updated
+        if (statusMessage != null) {
+            item {
+                Surface(
+                    color = Color(0xFFECFDF5),
+                    shape = RoundedCornerShape(10.dp),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFF10B981))),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(statusMessage!!, color = Color(0xFF065F46), fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { statusMessage = null }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = Color(0xFF059669), modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Search & Add Worker Button
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search worker name, ID or role...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    modifier = Modifier.weight(1f).testTag("search_worker_input"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Button(
+                    onClick = { showAddWorkerDialog = true },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                    modifier = Modifier.height(52.dp).testTag("add_new_worker_btn")
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add Worker", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // Department Filter Chips
+        item {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(departments) { dept ->
+                    val isSelected = selectedDepartment == dept
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedDepartment = dept },
+                        label = { Text(dept, fontSize = 12.sp) },
+                        leadingIcon = if (isSelected) {
+                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                        } else null
+                    )
+                }
+            }
+        }
+
+        // Worker Cards List
+        items(filteredWorkers) { worker ->
+            WorkerItemCard(
+                worker = worker,
+                onEditAccess = { editingWorker = worker },
+                onToggleActive = { newActive ->
+                    viewModel.updateWorkerAccess(
+                        workerId = worker.id,
+                        access = worker.workerAccess,
+                        isActive = newActive
+                    )
+                    statusMessage = "Updated ${worker.name}'s status to ${if (newActive) "Active" else "Suspended"}."
+                },
+                onDelete = {
+                    viewModel.deleteWorker(worker.id)
+                    statusMessage = "Worker ${worker.name} removed."
+                }
+            )
+        }
+
+        if (filteredWorkers.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.PersonOff, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(40.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("No Workers Found", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("No staff matches the selected filter or search.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+
+    // Modal Dialog: Edit Worker Access
+    if (editingWorker != null) {
+        EditWorkerAccessDialog(
+            worker = editingWorker!!,
+            onDismiss = { editingWorker = null },
+            onSave = { updatedAccess, isActive, jobTitle, department ->
+                viewModel.updateWorkerAccess(
+                    workerId = editingWorker!!.id,
+                    access = updatedAccess,
+                    isActive = isActive,
+                    jobTitle = jobTitle,
+                    department = department
+                )
+                statusMessage = "Access permissions for ${editingWorker!!.name} have been updated successfully!"
+                editingWorker = null
+            }
+        )
+    }
+
+    // Modal Dialog: Add New Worker
+    if (showAddWorkerDialog) {
+        AddNewWorkerDialog(
+            onDismiss = { showAddWorkerDialog = false },
+            onSave = { name, email, staffId, department, jobTitle, phone, access ->
+                viewModel.registerWorker(name, email, staffId, department, jobTitle, phone, access)
+                statusMessage = "New worker $name onboarded with assigned access permissions."
+                showAddWorkerDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun WorkerItemCard(
+    worker: User,
+    onEditAccess: () -> Unit,
+    onToggleActive: (Boolean) -> Unit,
+    onDelete: () -> Unit
+) {
+    val access = worker.workerAccess
+    val deptColor = when {
+        worker.department.contains("Mess", ignoreCase = true) -> Color(0xFFF59E0B)
+        worker.department.contains("Maint", ignoreCase = true) -> Color(0xFF0284C7)
+        worker.department.contains("Sanit", ignoreCase = true) || worker.department.contains("House", ignoreCase = true) -> Color(0xFF10B981)
+        else -> Color(0xFF8B5CF6)
+    }
+
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        border = CardDefaults.outlinedCardBorder(),
+        modifier = Modifier.fillMaxWidth().testTag("worker_card_${worker.studentId}")
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Avatar badge with initials
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(deptColor.copy(alpha = 0.15f))
+                        .border(1.5.dp, deptColor, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        worker.name.split(" ").mapNotNull { it.firstOrNull()?.toString() }.take(2).joinToString(""),
+                        fontWeight = FontWeight.ExtraBold,
+                        color = deptColor,
+                        fontSize = 15.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(worker.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            color = if (worker.isActive) Color(0xFFD1FAE5) else Color(0xFFFEE2E2),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                if (worker.isActive) "ACTIVE" else "SUSPENDED",
+                                color = if (worker.isActive) Color(0xFF059669) else Color(0xFFDC2626),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        "${worker.jobTitle.ifEmpty { "Hostel Staff" }} • ${worker.studentId}",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Surface(
+                            color = deptColor.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                worker.department.ifEmpty { "General Staff" },
+                                color = deptColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+                        if (worker.phone.isNotBlank()) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("• ${worker.phone}", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                }
+
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.DeleteOutline, contentDescription = "Delete Worker", tint = MaterialTheme.colorScheme.error)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Current Assigned Permissions Chips
+            Text("Assigned Access Permissions:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.outline)
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val hasAnyAccess = access.canScanQr || access.canManageMenu || access.canManageRooms || access.canResolveComplaints || access.canViewStudents || access.canApproveRebates
+
+                if (!hasAnyAccess) {
+                    Surface(color = Color(0xFFFEE2E2), shape = RoundedCornerShape(6.dp)) {
+                        Text("No active permissions (Access Revoked)", color = Color(0xFFDC2626), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (access.canScanQr) {
+                                PermissionChip(title = "QR Scanner", icon = Icons.Default.QrCodeScanner, color = Color(0xFF0284C7))
+                            }
+                            if (access.canManageMenu) {
+                                PermissionChip(title = "Menu Timings", icon = Icons.Default.Restaurant, color = Color(0xFFF59E0B))
+                            }
+                            if (access.canManageRooms) {
+                                PermissionChip(title = "Room Matrix", icon = Icons.Default.MeetingRoom, color = Color(0xFF10B981))
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (access.canResolveComplaints) {
+                                PermissionChip(title = "Complaints", icon = Icons.Default.ReportProblem, color = Color(0xFFEC4899))
+                            }
+                            if (access.canViewStudents) {
+                                PermissionChip(title = "Students List", icon = Icons.Default.People, color = Color(0xFF8B5CF6))
+                            }
+                            if (access.canApproveRebates) {
+                                PermissionChip(title = "Rebates", icon = Icons.Default.Payments, color = Color(0xFF14B8A6))
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Action: Edit Access Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Account Active", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Switch(
+                        checked = worker.isActive,
+                        onCheckedChange = onToggleActive,
+                        modifier = Modifier.testTag("toggle_worker_active_${worker.studentId}")
+                    )
+                }
+
+                Button(
+                    onClick = onEditAccess,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.testTag("edit_access_btn_${worker.studentId}")
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Edit Worker Access", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PermissionChip(title: String, icon: ImageVector, color: Color) {
+    Surface(
+        color = color.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(6.dp),
+        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(color.copy(alpha = 0.4f)))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(13.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(title, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+// Dialog for editing worker's permissions & access
+@Composable
+fun EditWorkerAccessDialog(
+    worker: User,
+    onDismiss: () -> Unit,
+    onSave: (access: WorkerAccess, isActive: Boolean, jobTitle: String, department: String) -> Unit
+) {
+    var canScanQr by remember { mutableStateOf(worker.workerAccess.canScanQr) }
+    var canManageMenu by remember { mutableStateOf(worker.workerAccess.canManageMenu) }
+    var canManageRooms by remember { mutableStateOf(worker.workerAccess.canManageRooms) }
+    var canResolveComplaints by remember { mutableStateOf(worker.workerAccess.canResolveComplaints) }
+    var canViewStudents by remember { mutableStateOf(worker.workerAccess.canViewStudents) }
+    var canApproveRebates by remember { mutableStateOf(worker.workerAccess.canApproveRebates) }
+    var isActive by remember { mutableStateOf(worker.isActive) }
+
+    var jobTitle by remember { mutableStateOf(worker.jobTitle) }
+    var department by remember { mutableStateOf(worker.department) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f)
+                .padding(4.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Edit Worker Access", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                        Text("${worker.name} • ${worker.studentId}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Quick Role Presets
+                Text("QUICK ROLE PRESETS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.outline)
+                Spacer(modifier = Modifier.height(6.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item {
+                        OutlinedButton(
+                            onClick = {
+                                canScanQr = true
+                                canManageMenu = true
+                                canManageRooms = false
+                                canResolveComplaints = false
+                                canViewStudents = false
+                                canApproveRebates = false
+                                jobTitle = "Mess Supervisor"
+                                department = "Mess & Kitchen"
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("Mess Supervisor", fontSize = 11.sp)
+                        }
+                    }
+                    item {
+                        OutlinedButton(
+                            onClick = {
+                                canScanQr = false
+                                canManageMenu = false
+                                canManageRooms = true
+                                canResolveComplaints = true
+                                canViewStudents = false
+                                canApproveRebates = false
+                                jobTitle = "Maintenance Technician"
+                                department = "Maintenance & Repairs"
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("Maintenance Tech", fontSize = 11.sp)
+                        }
+                    }
+                    item {
+                        OutlinedButton(
+                            onClick = {
+                                canScanQr = true
+                                canManageMenu = false
+                                canManageRooms = false
+                                canResolveComplaints = false
+                                canViewStudents = true
+                                canApproveRebates = false
+                                jobTitle = "Security Guard"
+                                department = "Campus Security"
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("Gate Security", fontSize = 11.sp)
+                        }
+                    }
+                    item {
+                        OutlinedButton(
+                            onClick = {
+                                canScanQr = true
+                                canManageMenu = true
+                                canManageRooms = true
+                                canResolveComplaints = true
+                                canViewStudents = true
+                                canApproveRebates = true
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("Full Access", fontSize = 11.sp)
+                        }
+                    }
+                    item {
+                        OutlinedButton(
+                            onClick = {
+                                canScanQr = false
+                                canManageMenu = false
+                                canManageRooms = false
+                                canResolveComplaints = false
+                                canViewStudents = false
+                                canApproveRebates = false
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("Revoke All", fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Editable Job Title & Department
+                OutlinedTextField(
+                    value = jobTitle,
+                    onValueChange = { jobTitle = it },
+                    label = { Text("Job Title / Designation") },
+                    modifier = Modifier.fillMaxWidth().testTag("edit_worker_job_title"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = department,
+                    onValueChange = { department = it },
+                    label = { Text("Department") },
+                    modifier = Modifier.fillMaxWidth().testTag("edit_worker_department"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Permissions Checklist
+                Text("INDIVIDUAL PERMISSION TOGGLES", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.outline)
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                PermissionToggleRow(
+                    title = "Meal QR Verification Scanner",
+                    subtitle = "Verify dynamic student QR passes at mess or gate entry",
+                    icon = Icons.Default.QrCodeScanner,
+                    checked = canScanQr,
+                    onCheckedChange = { canScanQr = it },
+                    testTag = "perm_toggle_qr_scanner"
+                )
+
+                PermissionToggleRow(
+                    title = "Mess Menu & Food Timings",
+                    subtitle = "Update daily menu items and meal operating hours",
+                    icon = Icons.Default.Restaurant,
+                    checked = canManageMenu,
+                    onCheckedChange = { canManageMenu = it },
+                    testTag = "perm_toggle_mess_menu"
+                )
+
+                PermissionToggleRow(
+                    title = "Room Matrix & Maintenance",
+                    subtitle = "Update bed occupancy, room repairs & cleaning status",
+                    icon = Icons.Default.MeetingRoom,
+                    checked = canManageRooms,
+                    onCheckedChange = { canManageRooms = it },
+                    testTag = "perm_toggle_room_matrix"
+                )
+
+                PermissionToggleRow(
+                    title = "Student Grievance & Complaints",
+                    subtitle = "Review and mark hostel complaints as in-progress or resolved",
+                    icon = Icons.Default.ReportProblem,
+                    checked = canResolveComplaints,
+                    onCheckedChange = { canResolveComplaints = it },
+                    testTag = "perm_toggle_complaints"
+                )
+
+                PermissionToggleRow(
+                    title = "Student Resident Directory",
+                    subtitle = "View list of hostel students and room allocations",
+                    icon = Icons.Default.People,
+                    checked = canViewStudents,
+                    onCheckedChange = { canViewStudents = it },
+                    testTag = "perm_toggle_students"
+                )
+
+                PermissionToggleRow(
+                    title = "Mess Rebate Verification",
+                    subtitle = "Process student leave mess rebate deductions",
+                    icon = Icons.Default.Payments,
+                    checked = canApproveRebates,
+                    onCheckedChange = { canApproveRebates = it },
+                    testTag = "perm_toggle_rebates"
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Account Active / Suspended
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Worker Account Status", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(if (isActive) "Worker is active and can login" else "Account suspended by Warden", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = isActive,
+                            onCheckedChange = { isActive = it },
+                            modifier = Modifier.testTag("perm_toggle_account_active")
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Save Changes Button
+                Button(
+                    onClick = {
+                        val newAccess = WorkerAccess(
+                            canScanQr = canScanQr,
+                            canManageMenu = canManageMenu,
+                            canManageRooms = canManageRooms,
+                            canResolveComplaints = canResolveComplaints,
+                            canViewStudents = canViewStudents,
+                            canApproveRebates = canApproveRebates
+                        )
+                        onSave(newAccess, isActive, jobTitle, department)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("save_worker_access_btn"),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Save & Apply Worker Permissions", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PermissionToggleRow(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    testTag: String
+) {
+    Surface(
+        color = if (checked) Color(0xFF0284C7).copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(10.dp),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(
+                if (checked) Color(0xFF0284C7).copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant
+            )
+        ),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (checked) Color(0xFF0284C7) else MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                modifier = Modifier.testTag(testTag)
+            )
+        }
+    }
+}
+
+// Dialog for onboarding a brand new worker
+@Composable
+fun AddNewWorkerDialog(
+    onDismiss: () -> Unit,
+    onSave: (name: String, email: String, staffId: String, department: String, jobTitle: String, phone: String, access: WorkerAccess) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var staffId by remember { mutableStateOf("WRK-0" + (10..99).random()) }
+    var department by remember { mutableStateOf("Mess & Kitchen") }
+    var jobTitle by remember { mutableStateOf("Mess Assistant") }
+    var phone by remember { mutableStateOf("+91 ") }
+
+    var canScanQr by remember { mutableStateOf(true) }
+    var canManageMenu by remember { mutableStateOf(false) }
+    var canManageRooms by remember { mutableStateOf(false) }
+    var canResolveComplaints by remember { mutableStateOf(false) }
+    var canViewStudents by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .padding(4.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Onboard New Worker", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                        Text("Assign initial permissions and staff credentials", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Worker Full Name *") },
+                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().testTag("add_worker_name"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = staffId,
+                    onValueChange = { staffId = it },
+                    label = { Text("Staff ID (e.g. WRK-MESS-05) *") },
+                    leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().testTag("add_worker_id"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = department,
+                    onValueChange = { department = it },
+                    label = { Text("Department (e.g. Mess, Maintenance, Security)") },
+                    leadingIcon = { Icon(Icons.Default.Work, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().testTag("add_worker_dept"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = jobTitle,
+                    onValueChange = { jobTitle = it },
+                    label = { Text("Job Title / Role") },
+                    modifier = Modifier.fillMaxWidth().testTag("add_worker_title"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Staff Email") },
+                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().testTag("add_worker_email"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text("Contact Phone") },
+                    leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().testTag("add_worker_phone"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text("INITIAL ACCESS PERMISSIONS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.outline)
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                PermissionToggleRow(
+                    title = "Meal QR Scanner",
+                    subtitle = "Scan and verify student QR tokens",
+                    icon = Icons.Default.QrCodeScanner,
+                    checked = canScanQr,
+                    onCheckedChange = { canScanQr = it },
+                    testTag = "add_perm_qr"
+                )
+
+                PermissionToggleRow(
+                    title = "Mess Menu & Timings",
+                    subtitle = "Manage weekly menu & serving timings",
+                    icon = Icons.Default.Restaurant,
+                    checked = canManageMenu,
+                    onCheckedChange = { canManageMenu = it },
+                    testTag = "add_perm_menu"
+                )
+
+                PermissionToggleRow(
+                    title = "Room Maintenance",
+                    subtitle = "Update bed occupancy and room repair status",
+                    icon = Icons.Default.MeetingRoom,
+                    checked = canManageRooms,
+                    onCheckedChange = { canManageRooms = it },
+                    testTag = "add_perm_rooms"
+                )
+
+                PermissionToggleRow(
+                    title = "Complaints Resolution",
+                    subtitle = "Resolve student complaints and maintenance tickets",
+                    icon = Icons.Default.ReportProblem,
+                    checked = canResolveComplaints,
+                    onCheckedChange = { canResolveComplaints = it },
+                    testTag = "add_perm_complaints"
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = {
+                        val access = WorkerAccess(
+                            canScanQr = canScanQr,
+                            canManageMenu = canManageMenu,
+                            canManageRooms = canManageRooms,
+                            canResolveComplaints = canResolveComplaints,
+                            canViewStudents = canViewStudents
+                        )
+                        val finalEmail = email.ifEmpty { "${staffId.lowercase()}@hostel.edu" }
+                        onSave(name, finalEmail, staffId, department, jobTitle, phone, access)
+                    },
+                    enabled = name.isNotBlank() && staffId.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth().height(48.dp).testTag("submit_add_worker"),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Save & Add Worker", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// WORKER MAIN CONTAINER (ACCESS ENFORCEMENT)
+// ==========================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WorkerMainContainer(
+    viewModel: HostelViewModel,
+    onLogout: () -> Unit
+) {
+    val authState by viewModel.authState.collectAsState()
+    val worker = authState.loggedInUser
+    val access = worker?.workerAccess ?: WorkerAccess()
+
+    // Determine permitted tools
+    val permittedTabs = remember(access) {
+        val list = mutableListOf<String>()
+        if (access.canScanQr) list.add("SCANNER")
+        if (access.canManageMenu) list.add("MENU")
+        if (access.canManageRooms) list.add("ROOMS")
+        if (access.canResolveComplaints) list.add("COMPLAINTS")
+        if (access.canViewStudents) list.add("STUDENTS")
+        list
+    }
+
+    var currentWorkerTab by remember(permittedTabs) {
+        mutableStateOf(permittedTabs.firstOrNull() ?: "RESTRICTED")
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Badge(
+                                containerColor = Color(0xFFF59E0B),
+                                contentColor = Color.White,
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Text("HOSTEL STAFF", fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+                            }
+                            Text(
+                                worker?.jobTitle?.ifEmpty { "Hostel Worker" } ?: "Staff Portal",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Text(
+                            "${worker?.name ?: "Staff"} • ${worker?.department ?: "Operations"}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = onLogout,
+                        modifier = Modifier.testTag("worker_logout_btn")
+                    ) {
+                        Icon(Icons.Default.ExitToApp, contentDescription = "Logout", tint = MaterialTheme.colorScheme.error)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+            )
+        },
+        bottomBar = {
+            if (permittedTabs.size > 1) {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                    permittedTabs.forEach { tabKey ->
+                        val (icon, label) = when (tabKey) {
+                            "SCANNER" -> Icons.Default.QrCodeScanner to "Scanner"
+                            "MENU" -> Icons.Default.Restaurant to "Menu"
+                            "ROOMS" -> Icons.Default.MeetingRoom to "Rooms"
+                            "COMPLAINTS" -> Icons.Default.ReportProblem to "Grievances"
+                            "STUDENTS" -> Icons.Default.People to "Students"
+                            else -> Icons.Default.Help to tabKey
+                        }
+                        NavigationBarItem(
+                            selected = currentWorkerTab == tabKey,
+                            onClick = { currentWorkerTab = tabKey },
+                            icon = { Icon(icon, contentDescription = label) },
+                            label = { Text(label, fontSize = 11.sp) },
+                            modifier = Modifier.testTag("worker_tab_${tabKey.lowercase()}")
+                        )
+                    }
+                }
+            }
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            when (currentWorkerTab) {
+                "SCANNER" -> AdminScannerVerificationScreen(viewModel)
+                "MENU" -> AdminMenuTimingsScreen(viewModel)
+                "ROOMS" -> AdminRoomMatrixScreen(viewModel)
+                "COMPLAINTS" -> AdminComplaintsBillingScreen(viewModel)
+                "STUDENTS" -> AdminStudentRegistrationScreen(viewModel)
+                else -> {
+                    // Restricted State
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFEF2F2)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(36.dp))
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Access Restricted by Warden", fontWeight = FontWeight.Bold, fontSize = 18.sp, textAlign = TextAlign.Center)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "Your account is registered as ${worker?.name ?: "Worker"} (${worker?.studentId}), but the Warden has not enabled any active tool permissions for your profile.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp)) {
+                            Text(
+                                "Contact: Chief Warden Office • Administration Block",
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(12.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }

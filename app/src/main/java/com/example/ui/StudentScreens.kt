@@ -84,7 +84,8 @@ fun StudentMainContainer(
                     val selected = tab == currentTab
                     val icon = when (tab) {
                         StudentTab.DYNAMIC_QR -> Icons.Default.QrCode2
-                        StudentTab.MY_ID -> Icons.Default.Badge
+                        StudentTab.ROOM_ALLOTMENT -> Icons.Default.MeetingRoom
+                        StudentTab.PAY_BILLS -> Icons.Default.Payment
                         StudentTab.TODAY_MENU -> Icons.Default.RestaurantMenu
                         StudentTab.SERVICES -> Icons.Default.SupportAgent
                     }
@@ -92,7 +93,7 @@ fun StudentMainContainer(
                         selected = selected,
                         onClick = { viewModel.setStudentTab(tab) },
                         icon = { Icon(icon, contentDescription = tab.title) },
-                        label = { Text(tab.title.substringBefore(" "), fontSize = 11.sp) },
+                        label = { Text(tab.title.substringBefore(" "), fontSize = 10.sp) },
                         modifier = Modifier.testTag("student_tab_${tab.name.lowercase()}")
                     )
                 }
@@ -102,7 +103,8 @@ fun StudentMainContainer(
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             when (currentTab) {
                 StudentTab.DYNAMIC_QR -> StudentDynamicQrScreen(viewModel)
-                StudentTab.MY_ID -> StudentDigitalIdScreen(viewModel)
+                StudentTab.ROOM_ALLOTMENT -> StudentRoomAllotmentScreen(viewModel)
+                StudentTab.PAY_BILLS -> StudentBillingPaymentScreen(viewModel)
                 StudentTab.TODAY_MENU -> StudentMessMenuScreen(viewModel)
                 StudentTab.SERVICES -> StudentServicesScreen(viewModel)
             }
@@ -497,6 +499,8 @@ fun StudentServicesScreen(viewModel: HostelViewModel) {
     val authState by viewModel.authState.collectAsState()
     val student = authState.loggedInUser ?: return
 
+    var activeSection by remember { mutableStateOf("SUPPORT") } // "SUPPORT", "DIGITAL_ID"
+
     var complaintCategory by remember { mutableStateOf(ComplaintCategory.HOSTEL_ROOM) }
     var complaintTitle by remember { mutableStateOf("") }
     var complaintDesc by remember { mutableStateOf("") }
@@ -511,10 +515,39 @@ fun StudentServicesScreen(viewModel: HostelViewModel) {
     val complaints by viewModel.complaints.collectAsState()
     val studentComplaints = complaints.filter { it.studentId == student.studentId }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = activeSection == "SUPPORT",
+                onClick = { activeSection = "SUPPORT" },
+                leadingIcon = { Icon(Icons.Default.SupportAgent, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                label = { Text("Grievances & Rebate") },
+                modifier = Modifier.weight(1f)
+            )
+
+            FilterChip(
+                selected = activeSection == "DIGITAL_ID",
+                onClick = { activeSection = "DIGITAL_ID" },
+                leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                label = { Text("Resident Digital ID") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        if (activeSection == "DIGITAL_ID") {
+            StudentDigitalIdScreen(viewModel)
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
         // Complaint Ticket Submission
         item {
             Card(
@@ -677,4 +710,7 @@ fun StudentServicesScreen(viewModel: HostelViewModel) {
             }
         }
     }
+    }
 }
+}
+

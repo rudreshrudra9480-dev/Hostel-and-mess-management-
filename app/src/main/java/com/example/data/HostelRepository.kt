@@ -22,7 +22,82 @@ class HostelRepository {
                 name = "Dr. Rajesh Sharma (Warden)",
                 email = "admin@hostel.edu",
                 studentId = "ADMIN-001",
-                role = UserRole.ADMIN
+                role = UserRole.ADMIN,
+                blockName = "All Campus Blocks",
+                phone = "+91 98765 43210"
+            ),
+            // Seed Hostel Workers & Staff with customizable permissions
+            User(
+                id = "worker-1",
+                name = "Ramesh Kumar",
+                email = "ramesh.mess@hostel.edu",
+                studentId = "WRK-MESS-01",
+                role = UserRole.STAFF,
+                department = "Mess & Kitchen",
+                jobTitle = "Mess Supervisor & Chef",
+                phone = "+91 98111 22334",
+                workerAccess = WorkerAccess(
+                    canScanQr = true,
+                    canManageMenu = true,
+                    canManageRooms = false,
+                    canResolveComplaints = false,
+                    canViewStudents = false,
+                    canApproveRebates = false
+                )
+            ),
+            User(
+                id = "worker-2",
+                name = "Suresh Yadav",
+                email = "suresh.maint@hostel.edu",
+                studentId = "WRK-MAINT-02",
+                role = UserRole.STAFF,
+                department = "Maintenance & Repairs",
+                jobTitle = "Senior Electrician & Plumber",
+                phone = "+91 98222 33445",
+                workerAccess = WorkerAccess(
+                    canScanQr = false,
+                    canManageMenu = false,
+                    canManageRooms = true,
+                    canResolveComplaints = true,
+                    canViewStudents = false,
+                    canApproveRebates = false
+                )
+            ),
+            User(
+                id = "worker-3",
+                name = "Anita Bai",
+                email = "anita.house@hostel.edu",
+                studentId = "WRK-HOUSE-03",
+                role = UserRole.STAFF,
+                department = "Sanitation & Housekeeping",
+                jobTitle = "Housekeeping Supervisor",
+                phone = "+91 98333 44556",
+                workerAccess = WorkerAccess(
+                    canScanQr = false,
+                    canManageMenu = false,
+                    canManageRooms = true,
+                    canResolveComplaints = true,
+                    canViewStudents = false,
+                    canApproveRebates = false
+                )
+            ),
+            User(
+                id = "worker-4",
+                name = "Manoj Singh",
+                email = "manoj.security@hostel.edu",
+                studentId = "WRK-SEC-04",
+                role = UserRole.STAFF,
+                department = "Campus Security",
+                jobTitle = "Security Officer & Gatekeeper",
+                phone = "+91 98444 55667",
+                workerAccess = WorkerAccess(
+                    canScanQr = true,
+                    canManageMenu = false,
+                    canManageRooms = false,
+                    canResolveComplaints = false,
+                    canViewStudents = true,
+                    canApproveRebates = false
+                )
             ),
             User(
                 id = "student-1",
@@ -163,6 +238,154 @@ class HostelRepository {
     )
     val rebates: StateFlow<List<RebateRequest>> = _rebates.asStateFlow()
 
+    // Room Requests & Allotment tracking
+    private val _roomRequests = MutableStateFlow<List<RoomRequest>>(
+        listOf(
+            RoomRequest(
+                id = "REQ-ROOM-101",
+                studentId = "HST-2026-101",
+                studentName = "Aarav Mehta",
+                requestType = "Upgrade to AC Room",
+                currentRoom = "A-204",
+                preferredBlock = "Block A",
+                preferredRoomType = "Double Sharing AC",
+                preferredFloor = "2nd Floor",
+                reason = "Requirement for temperature controlled study environment for competitive exams.",
+                specialNotes = "Prefer quiet corner room if available.",
+                status = RoomRequestStatus.ALLOCATED,
+                allocatedRoom = "A-204 (Bed 1)",
+                wardenRemarks = "Allocated as requested based on academic merit score.",
+                requestDate = "2026-08-10"
+            ),
+            RoomRequest(
+                id = "REQ-ROOM-102",
+                studentId = "HST-2026-102",
+                studentName = "Priya Sharma",
+                requestType = "Room Change / Transfer",
+                currentRoom = "B-105",
+                preferredBlock = "Block B",
+                preferredRoomType = "Single Occupancy AC",
+                preferredFloor = "1st Floor",
+                reason = "Medical recommendation for ground/1st floor single occupancy due to ankle injury.",
+                specialNotes = "Attached medical prescription submitted to dispensary.",
+                status = RoomRequestStatus.PENDING,
+                requestDate = "2026-09-10"
+            )
+        )
+    )
+    val roomRequests: StateFlow<List<RoomRequest>> = _roomRequests.asStateFlow()
+
+    // Student Billing Statements
+    private val _billStatements = MutableStateFlow<Map<String, StudentBillStatement>>(
+        mapOf(
+            "HST-2026-101" to StudentBillStatement(
+                studentId = "HST-2026-101",
+                monthlyMessFeeDue = 3200.0,
+                messExtras = 250.0,
+                messRebateDeductions = 400.0,
+                isMessBillPaid = false,
+                semesterRoomFeeDue = 18000.0,
+                utilityCharges = 1500.0,
+                maintenanceFund = 800.0,
+                isRoomFeePaid = false,
+                walletBalance = 4850.0
+            ),
+            "HST-2026-102" to StudentBillStatement(
+                studentId = "HST-2026-102",
+                monthlyMessFeeDue = 3200.0,
+                messExtras = 100.0,
+                messRebateDeductions = 0.0,
+                isMessBillPaid = true,
+                semesterRoomFeeDue = 18000.0,
+                utilityCharges = 1500.0,
+                maintenanceFund = 800.0,
+                isRoomFeePaid = false,
+                walletBalance = 6200.0
+            ),
+            "HST-2026-103" to StudentBillStatement(
+                studentId = "HST-2026-103",
+                monthlyMessFeeDue = 3200.0,
+                messExtras = 0.0,
+                messRebateDeductions = 200.0,
+                isMessBillPaid = false,
+                semesterRoomFeeDue = 18000.0,
+                utilityCharges = 1500.0,
+                maintenanceFund = 800.0,
+                isRoomFeePaid = true,
+                walletBalance = 3500.0
+            )
+        )
+    )
+    val billStatements: StateFlow<Map<String, StudentBillStatement>> = _billStatements.asStateFlow()
+
+    // Payment Transactions History
+    private val _transactions = MutableStateFlow<List<PaymentTransaction>>(
+        listOf(
+            PaymentTransaction(
+                transactionId = "TXN-HST-84920",
+                orderId = "ORD-HST-89210",
+                studentId = "HST-2026-101",
+                studentName = "Aarav Mehta",
+                billType = BillType.MESS_BILL,
+                amount = 3200.0,
+                paymentMethod = PaymentMethod.UPI,
+                paymentReference = "UPI: aarav@okhdfc (ID: 948192841)",
+                status = PaymentStatus.SUCCESS,
+                paidAtDate = "2026-08-05",
+                gatewayProvider = "Bharat UPI Switch Gateway",
+                bankReferenceNumber = "RRN-UPI-884920194829",
+                remarks = "August 2026 Monthly Mess Advance - Reconciled"
+            ),
+            PaymentTransaction(
+                transactionId = "TXN-HST-61029",
+                orderId = "ORD-HST-61928",
+                studentId = "HST-2026-101",
+                studentName = "Aarav Mehta",
+                billType = BillType.HOSTEL_ROOM_FEE,
+                amount = 20300.0,
+                paymentMethod = PaymentMethod.CARD,
+                paymentReference = "SBI MasterCard ending in 1184",
+                status = PaymentStatus.FAILED,
+                paidAtDate = "2026-09-08",
+                gatewayProvider = "Campus Razorpay Gateway",
+                bankReferenceNumber = "RRN-FAIL-194829103948",
+                failureReason = "Bank 3D-Secure timeout / transaction declined by issuer",
+                remarks = "Declined by issuing bank during OTP verification"
+            ),
+            PaymentTransaction(
+                transactionId = "TXN-HST-73194",
+                orderId = "ORD-HST-73918",
+                studentId = "HST-2026-101",
+                studentName = "Aarav Mehta",
+                billType = BillType.HOSTEL_ROOM_FEE,
+                amount = 5000.0,
+                paymentMethod = PaymentMethod.CARD,
+                paymentReference = "HDFC Visa ending in 4289",
+                status = PaymentStatus.SUCCESS,
+                paidAtDate = "2026-07-28",
+                gatewayProvider = "Campus Razorpay Gateway",
+                bankReferenceNumber = "RRN-HDFC-993817294819",
+                remarks = "Hostel Security Caution Deposit - Reconciled"
+            ),
+            PaymentTransaction(
+                transactionId = "TXN-HST-92011",
+                orderId = "ORD-HST-92819",
+                studentId = "HST-2026-102",
+                studentName = "Priya Sharma",
+                billType = BillType.MESS_BILL,
+                amount = 3300.0,
+                paymentMethod = PaymentMethod.UPI,
+                paymentReference = "Google Pay UPI: priya@okaxis",
+                status = PaymentStatus.SUCCESS,
+                paidAtDate = "2026-09-02",
+                gatewayProvider = "Bharat UPI Switch Gateway",
+                bankReferenceNumber = "RRN-UPI-774910294819",
+                remarks = "September 2026 Mess Dues with Special Feast Extra"
+            )
+        )
+    )
+    val transactions: StateFlow<List<PaymentTransaction>> = _transactions.asStateFlow()
+
     fun getTodayDate(): String = dateFormat.format(Date())
     fun getCurrentTime(): String = timeFormat.format(Date())
 
@@ -211,6 +434,79 @@ class HostelRepository {
             }
         }
         return newUser
+    }
+
+    // Register a new Warden (Chief Administrator)
+    fun registerWarden(
+        name: String,
+        email: String,
+        wardenId: String,
+        blockName: String,
+        phone: String
+    ): User {
+        val newWarden = User(
+            name = name.trim(),
+            email = email.trim(),
+            studentId = wardenId.trim().ifEmpty { "WRD-${System.currentTimeMillis().toString().takeLast(4)}" },
+            role = UserRole.ADMIN,
+            blockName = blockName.trim(),
+            phone = phone.trim()
+        )
+        _users.value = _users.value + newWarden
+        return newWarden
+    }
+
+    // Register a new Worker/Staff member
+    fun registerWorker(
+        name: String,
+        email: String,
+        staffId: String,
+        department: String,
+        jobTitle: String,
+        phone: String,
+        access: WorkerAccess
+    ): User {
+        val count = _users.value.filter { it.role == UserRole.STAFF }.size + 1
+        val finalStaffId = staffId.trim().ifEmpty { "WRK-${department.take(3).uppercase()}-0$count" }
+        val newWorker = User(
+            name = name.trim(),
+            email = email.trim(),
+            studentId = finalStaffId,
+            role = UserRole.STAFF,
+            department = department.trim(),
+            jobTitle = jobTitle.trim(),
+            phone = phone.trim(),
+            workerAccess = access
+        )
+        _users.value = _users.value + newWorker
+        return newWorker
+    }
+
+    // Warden editing worker permissions & active status
+    fun updateWorkerAccess(
+        workerId: String,
+        access: WorkerAccess,
+        isActive: Boolean = true,
+        jobTitle: String? = null,
+        department: String? = null
+    ) {
+        _users.value = _users.value.map { user ->
+            if (user.id == workerId || user.studentId == workerId) {
+                user.copy(
+                    workerAccess = access,
+                    isActive = isActive,
+                    jobTitle = jobTitle ?: user.jobTitle,
+                    department = department ?: user.department
+                )
+            } else {
+                user
+            }
+        }
+    }
+
+    // Delete or remove worker from staff directory
+    fun deleteWorker(workerId: String) {
+        _users.value = _users.value.filter { it.id != workerId && it.studentId != workerId }
     }
 
     // Generate dynamic QR token with 60-second validity
@@ -423,5 +719,245 @@ class HostelRepository {
             )
             _menu.value = _menu.value + newEntry
         }
+    }
+
+    // ==========================================
+    // ROOM REQUEST & ALLOTMENT METHODS
+    // ==========================================
+    fun submitRoomRequest(
+        studentId: String,
+        studentName: String,
+        requestType: String,
+        currentRoom: String,
+        preferredBlock: String,
+        preferredRoomType: String,
+        preferredFloor: String,
+        reason: String,
+        specialNotes: String
+    ): RoomRequest {
+        val newReq = RoomRequest(
+            id = "REQ-ROOM-${System.currentTimeMillis().toString().takeLast(5)}",
+            studentId = studentId,
+            studentName = studentName,
+            requestType = requestType,
+            currentRoom = currentRoom,
+            preferredBlock = preferredBlock,
+            preferredRoomType = preferredRoomType,
+            preferredFloor = preferredFloor,
+            reason = reason,
+            specialNotes = specialNotes,
+            status = RoomRequestStatus.PENDING,
+            requestDate = getTodayDate()
+        )
+        _roomRequests.value = listOf(newReq) + _roomRequests.value
+        return newReq
+    }
+
+    fun approveRoomRequest(requestId: String, allocatedRoomNumber: String, remarks: String) {
+        _roomRequests.value = _roomRequests.value.map { req ->
+            if (req.id == requestId) {
+                req.copy(
+                    status = RoomRequestStatus.ALLOCATED,
+                    allocatedRoom = allocatedRoomNumber,
+                    wardenRemarks = remarks
+                )
+            } else req
+        }
+
+        // Also update student's assigned room and room occupancy if a student matches
+        val targetRequest = _roomRequests.value.find { it.id == requestId }
+        if (targetRequest != null && allocatedRoomNumber.isNotBlank()) {
+            _users.value = _users.value.map { user ->
+                if (user.studentId == targetRequest.studentId) {
+                    user.copy(
+                        roomNumber = allocatedRoomNumber,
+                        blockName = targetRequest.preferredBlock.ifBlank { user.blockName }
+                    )
+                } else user
+            }
+        }
+    }
+
+    fun rejectRoomRequest(requestId: String, remarks: String) {
+        _roomRequests.value = _roomRequests.value.map { req ->
+            if (req.id == requestId) {
+                req.copy(
+                    status = RoomRequestStatus.REJECTED,
+                    wardenRemarks = remarks
+                )
+            } else req
+        }
+    }
+
+    // ==========================================
+    // BILLING & PAYMENT PROCESSING METHODS
+    // ==========================================
+    fun getStudentBillStatement(studentId: String): StudentBillStatement {
+        return _billStatements.value[studentId] ?: StudentBillStatement(
+            studentId = studentId,
+            monthlyMessFeeDue = 3200.0,
+            messExtras = 0.0,
+            messRebateDeductions = 0.0,
+            isMessBillPaid = false,
+            semesterRoomFeeDue = 18000.0,
+            utilityCharges = 1500.0,
+            maintenanceFund = 800.0,
+            isRoomFeePaid = false,
+            walletBalance = 5000.0
+        )
+    }
+
+    fun recordTransaction(txn: PaymentTransaction): PaymentTransaction {
+        if (txn.status == PaymentStatus.SUCCESS) {
+            val currentStmt = getStudentBillStatement(txn.studentId)
+            val updatedStmt = when (txn.billType) {
+                BillType.MESS_BILL -> currentStmt.copy(isMessBillPaid = true)
+                BillType.HOSTEL_ROOM_FEE -> currentStmt.copy(isRoomFeePaid = true)
+                BillType.COMBINED -> currentStmt.copy(isMessBillPaid = true, isRoomFeePaid = true)
+            }
+
+            val finalStmt = if (txn.paymentMethod == PaymentMethod.CAMPUS_WALLET) {
+                updatedStmt.copy(walletBalance = (updatedStmt.walletBalance - txn.amount).coerceAtLeast(0.0))
+            } else updatedStmt
+
+            _billStatements.value = _billStatements.value + (txn.studentId to finalStmt)
+        }
+
+        _transactions.value = listOf(txn) + _transactions.value
+        return txn
+    }
+
+    fun processPayment(
+        studentId: String,
+        studentName: String,
+        billType: BillType,
+        amountPaid: Double,
+        paymentMethod: PaymentMethod,
+        paymentReference: String
+    ): PaymentTransaction {
+        val txn = PaymentTransaction(
+            transactionId = "TXN-HST-${System.currentTimeMillis().toString().takeLast(6)}",
+            studentId = studentId,
+            studentName = studentName,
+            billType = billType,
+            amount = amountPaid,
+            paymentMethod = paymentMethod,
+            paymentReference = paymentReference,
+            status = PaymentStatus.SUCCESS,
+            paidAtDate = getTodayDate(),
+            remarks = "Paid online via ${paymentMethod.displayName} • Verified by Hostel Accounts"
+        )
+        return recordTransaction(txn)
+    }
+
+    fun getMonthlyBillingHistory(studentId: String): List<MonthlyBillingRecord> {
+        val currentStmt = getStudentBillStatement(studentId)
+        val septMessBilled = (currentStmt.monthlyMessFeeDue + currentStmt.messExtras - currentStmt.messRebateDeductions).coerceAtLeast(0.0)
+        val septRoomBilled = currentStmt.semesterRoomFeeDue + currentStmt.utilityCharges + currentStmt.maintenanceFund
+
+        val septMessPaid = if (currentStmt.isMessBillPaid) septMessBilled else 0.0
+        val septMessPending = if (currentStmt.isMessBillPaid) 0.0 else septMessBilled
+
+        val septRoomPaid = if (currentStmt.isRoomFeePaid) septRoomBilled else 0.0
+        val septRoomPending = if (currentStmt.isRoomFeePaid) 0.0 else septRoomBilled
+
+        val septStatus = when {
+            currentStmt.isMessBillPaid && currentStmt.isRoomFeePaid -> MonthlyBillingStatus.PAID
+            currentStmt.isMessBillPaid || currentStmt.isRoomFeePaid -> MonthlyBillingStatus.PARTIALLY_PAID
+            else -> MonthlyBillingStatus.PENDING
+        }
+
+        return listOf(
+            MonthlyBillingRecord(
+                monthKey = "2026-09",
+                monthName = "Sep 2026",
+                fullMonthName = "September 2026",
+                messBilled = septMessBilled,
+                messPaid = septMessPaid,
+                messPending = septMessPending,
+                roomBilled = septRoomBilled,
+                roomPaid = septRoomPaid,
+                roomPending = septRoomPending,
+                status = septStatus,
+                dueDate = "2026-09-25",
+                paidDate = if (septStatus == MonthlyBillingStatus.PAID) "2026-09-14" else null,
+                notes = "Current Active Cycle: Mess base ₹${currentStmt.monthlyMessFeeDue.toInt()} + ₹${currentStmt.messExtras.toInt()} extras - ₹${currentStmt.messRebateDeductions.toInt()} rebate"
+            ),
+            MonthlyBillingRecord(
+                monthKey = "2026-08",
+                monthName = "Aug 2026",
+                fullMonthName = "August 2026",
+                messBilled = 3200.0,
+                messPaid = 3200.0,
+                messPending = 0.0,
+                roomBilled = 0.0,
+                roomPaid = 0.0,
+                roomPending = 0.0,
+                status = MonthlyBillingStatus.PAID,
+                dueDate = "2026-08-25",
+                paidDate = "2026-08-05",
+                notes = "Mess dining fee cleared via UPI Bharat Switch"
+            ),
+            MonthlyBillingRecord(
+                monthKey = "2026-07",
+                monthName = "Jul 2026",
+                fullMonthName = "July 2026",
+                messBilled = 3200.0,
+                messPaid = 3200.0,
+                messPending = 0.0,
+                roomBilled = 5000.0,
+                roomPaid = 5000.0,
+                roomPending = 0.0,
+                status = MonthlyBillingStatus.PAID,
+                dueDate = "2026-07-28",
+                paidDate = "2026-07-28",
+                notes = "Hostel Security Caution Deposit & Mess advance reconciled"
+            ),
+            MonthlyBillingRecord(
+                monthKey = "2026-06",
+                monthName = "Jun 2026",
+                fullMonthName = "June 2026",
+                messBilled = 2800.0,
+                messPaid = 2800.0,
+                messPending = 0.0,
+                roomBilled = 0.0,
+                roomPaid = 0.0,
+                roomPending = 0.0,
+                status = MonthlyBillingStatus.PAID,
+                dueDate = "2026-06-25",
+                paidDate = "2026-06-18",
+                notes = "Summer term mess fee adjusted with 4-day leave rebate"
+            ),
+            MonthlyBillingRecord(
+                monthKey = "2026-05",
+                monthName = "May 2026",
+                fullMonthName = "May 2026",
+                messBilled = 3450.0,
+                messPaid = 3450.0,
+                messPending = 0.0,
+                roomBilled = 0.0,
+                roomPaid = 0.0,
+                roomPending = 0.0,
+                status = MonthlyBillingStatus.PAID,
+                dueDate = "2026-05-25",
+                paidDate = "2026-05-12",
+                notes = "Mess bill including ₹250 night canteen and dairy coupon charges"
+            ),
+            MonthlyBillingRecord(
+                monthKey = "2026-04",
+                monthName = "Apr 2026",
+                fullMonthName = "April 2026",
+                messBilled = 3200.0,
+                messPaid = 3200.0,
+                messPending = 0.0,
+                roomBilled = 20300.0,
+                roomPaid = 20300.0,
+                roomPending = 0.0,
+                status = MonthlyBillingStatus.PAID,
+                dueDate = "2026-04-20",
+                paidDate = "2026-04-15",
+                notes = "Spring Semester 2026 room allotment fee and utilities paid in full"
+            )
+        )
     }
 }
