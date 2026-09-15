@@ -47,6 +47,7 @@ fun StudentBillingAnalyticsView(
     student: User,
     onNavigateToPay: (BillType) -> Unit,
     onViewReceipt: (PaymentTransaction) -> Unit,
+    onOpenDownloadReport: ((MonthlyBillingRecord?) -> Unit)? = null,
     onShowFeedback: (String) -> Unit = {}
 ) {
     val billStatements by viewModel.billStatements.collectAsState()
@@ -62,6 +63,9 @@ fun StudentBillingAnalyticsView(
     var selectedMonthRecord by remember {
         mutableStateOf<MonthlyBillingRecord?>(monthlyHistory.firstOrNull())
     }
+
+    var showDownloadDialog by remember { mutableStateOf(false) }
+    var downloadTargetRecord by remember { mutableStateOf<MonthlyBillingRecord?>(null) }
 
     // Filtered monthly records based on selected horizon
     val displayedMonthlyHistory = remember(monthlyHistory, selectedTimeHorizon) {
@@ -111,17 +115,25 @@ fun StudentBillingAnalyticsView(
                     )
                 }
 
-                IconButton(
+                FilledTonalButton(
                     onClick = {
-                        onShowFeedback("Official 6-month statement downloaded as PDF")
+                        downloadTargetRecord = selectedMonthRecord ?: monthlyHistory.firstOrNull()
+                        if (onOpenDownloadReport != null) {
+                            onOpenDownloadReport(downloadTargetRecord)
+                        } else {
+                            showDownloadDialog = true
+                        }
                     },
-                    modifier = Modifier.testTag("download_statement_btn")
+                    modifier = Modifier.testTag("download_statement_btn"),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         Icons.Default.Download,
                         contentDescription = "Download Statement",
-                        tint = MaterialTheme.colorScheme.primary
+                        modifier = Modifier.size(16.dp)
                     )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Statement", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -463,23 +475,49 @@ fun StudentBillingAnalyticsView(
                             }
                         }
 
-                        // CTA if pending
-                        if (record.totalPending > 0) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Button(
+                        // Action buttons: Download statement report and pay dues if pending
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
                                 onClick = {
-                                    if (record.messPending > 0 && record.roomPending > 0) {
-                                        onNavigateToPay(BillType.COMBINED)
-                                    } else if (record.messPending > 0) {
-                                        onNavigateToPay(BillType.MESS_BILL)
+                                    downloadTargetRecord = record
+                                    if (onOpenDownloadReport != null) {
+                                        onOpenDownloadReport(record)
                                     } else {
-                                        onNavigateToPay(BillType.HOSTEL_ROOM_FEE)
+                                        showDownloadDialog = true
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth().height(42.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text("Pay Dues for ${record.monthName} (₹${record.totalPending.toInt()})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Download Report", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            if (record.totalPending > 0) {
+                                Button(
+                                    onClick = {
+                                        if (record.messPending > 0 && record.roomPending > 0) {
+                                            onNavigateToPay(BillType.COMBINED)
+                                        } else if (record.messPending > 0) {
+                                            onNavigateToPay(BillType.MESS_BILL)
+                                        } else {
+                                            onNavigateToPay(BillType.HOSTEL_ROOM_FEE)
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Pay ₹${record.totalPending.toInt()}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -609,6 +647,68 @@ fun StudentBillingAnalyticsView(
         }
 
         // ==========================================
+        // 6B. DOWNLOAD FORMATTED STATEMENT BANNER
+        // ==========================================
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF1E293B)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(24.dp))
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Official Billing Report",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = Color.White
+                        )
+                        Text(
+                            "Download certified monthly statements summarizing dining meals, canteen extras, leave rebates & hostel room rent.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF94A3B8),
+                            lineHeight = 15.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                downloadTargetRecord = selectedMonthRecord ?: monthlyHistory.firstOrNull()
+                                if (onOpenDownloadReport != null) {
+                                    onOpenDownloadReport(downloadTargetRecord)
+                                } else {
+                                    showDownloadDialog = true
+                                }
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.testTag("download_banner_report_btn")
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Download Formatted Statement", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==========================================
         // 7. COMPREHENSIVE MONTHLY STATEMENT HISTORY
         // ==========================================
         item {
@@ -645,9 +745,28 @@ fun StudentBillingAnalyticsView(
                     } else {
                         onShowFeedback("Official receipt generated for ${record.fullMonthName}")
                     }
+                },
+                onDownloadReport = {
+                    downloadTargetRecord = record
+                    if (onOpenDownloadReport != null) {
+                        onOpenDownloadReport(record)
+                    } else {
+                        showDownloadDialog = true
+                    }
                 }
             )
         }
+    }
+
+    if (showDownloadDialog) {
+        DownloadStatementReportDialog(
+            student = student,
+            statement = statement,
+            monthlyRecords = monthlyHistory,
+            transactions = studentTransactions,
+            initialSelectedRecord = downloadTargetRecord,
+            onDismiss = { showDownloadDialog = false }
+        )
     }
 }
 
@@ -915,7 +1034,8 @@ fun MonthlyStatementCard(
     isSelected: Boolean,
     onSelect: () -> Unit,
     onPayDues: () -> Unit,
-    onViewReceipt: () -> Unit
+    onViewReceipt: () -> Unit,
+    onDownloadReport: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -1021,6 +1141,18 @@ fun MonthlyStatementCard(
                     }
 
                     IconButton(
+                        onClick = onDownloadReport,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Download,
+                            contentDescription = "Download Report",
+                            modifier = Modifier.size(15.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    IconButton(
                         onClick = { expanded = !expanded },
                         modifier = Modifier.size(24.dp)
                     ) {
@@ -1067,6 +1199,20 @@ fun MonthlyStatementCard(
                             Text("Settlement Date", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
                             Text(record.paidDate, fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedButton(
+                        onClick = onDownloadReport,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(34.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Download ${record.monthName} Statement Report", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

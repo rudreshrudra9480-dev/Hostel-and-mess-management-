@@ -77,6 +77,12 @@ fun StudentBillingPaymentScreen(viewModel: HostelViewModel) {
     // Dialogs and processing states
     var activeReceipt by remember { mutableStateOf<PaymentTransaction?>(null) }
     var showQrDialog by remember { mutableStateOf(false) }
+    var showDownloadReportDialog by remember { mutableStateOf(false) }
+    var reportTargetRecord by remember { mutableStateOf<MonthlyBillingRecord?>(null) }
+
+    val monthlyHistory = remember(statement, studentTransactions) {
+        viewModel.getMonthlyBillingHistory(student.studentId)
+    }
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -160,6 +166,10 @@ fun StudentBillingPaymentScreen(viewModel: HostelViewModel) {
                     },
                     onViewReceipt = { txn ->
                         activeReceipt = txn
+                    },
+                    onOpenDownloadReport = { targetRecord ->
+                        reportTargetRecord = targetRecord
+                        showDownloadReportDialog = true
                     },
                     onShowFeedback = { msg ->
                         actionFeedbackMessage = msg
@@ -273,6 +283,24 @@ fun StudentBillingPaymentScreen(viewModel: HostelViewModel) {
                             Text("CAMPUS WALLET", color = Color(0xFF94A3B8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Text("₹${statement.walletBalance.toInt()}", color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    OutlinedButton(
+                        onClick = {
+                            reportTargetRecord = monthlyHistory.firstOrNull()
+                            showDownloadReportDialog = true
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8)),
+                        border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("download_statement_report_hero_btn")
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Download Statement Report (HTML / Text)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1115,6 +1143,18 @@ fun StudentBillingPaymentScreen(viewModel: HostelViewModel) {
                 }
             }
         }
+    }
+
+    // Monthly Billing Statement Report Download Dialog
+    if (showDownloadReportDialog) {
+        DownloadStatementReportDialog(
+            student = student,
+            statement = statement,
+            monthlyRecords = monthlyHistory,
+            transactions = studentTransactions,
+            initialSelectedRecord = reportTargetRecord,
+            onDismiss = { showDownloadReportDialog = false }
+        )
     }
 }
 
